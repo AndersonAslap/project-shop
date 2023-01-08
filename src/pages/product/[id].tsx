@@ -1,6 +1,10 @@
+import axios from "axios";
 import { GetStaticPaths, GetStaticProps } from "next";
+import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
+import { useState } from "react";
+import { toast } from "react-toastify";
 import Stripe from "stripe";
 import { stripe } from "../../lib/stripe";
 import { ImageContainer, ProductContainer, ProductDetails } from "../../styles/pages/product";
@@ -12,6 +16,7 @@ interface ProductProps {
         imageUrl: string;
         price: string;
         description: string;
+        defaultPriceId: string;
     }
 }
 
@@ -19,11 +24,36 @@ export default function Product({ product } : ProductProps) {
 
     const { isFallback } = useRouter()
 
+    const [isRedirectCheckout, setIsRedirectCheckout] = useState(false)
+
+
+    async function handleBuyProduct() {
+        try {
+            setIsRedirectCheckout(true)
+
+            const response = await axios.post('/api/checkout', {
+                priceId: product.defaultPriceId
+            })
+
+            const { checkoutUrl } = response.data
+
+            window.location.href = checkoutUrl
+        } catch (err) {
+            // Conectar a uma ferramenta de observabilidade (Datadog / Sentury)
+            setIsRedirectCheckout(false);
+            toast.error('Falha ao ir para página de pagamento')
+        }
+    }
+
     if(isFallback) {
         return <p>Loading...</p>
     }
-
+    
     return (
+        <>
+        <Head>
+            <title>{product.name} | Shop</title>
+        </Head>
         <ProductContainer>
             <ImageContainer>
                 <Image src={product.imageUrl} width={520} height={480} alt="" />
@@ -35,11 +65,12 @@ export default function Product({ product } : ProductProps) {
 
                 <p>{product.description}</p>
             
-                <button>
+                <button disabled={isRedirectCheckout} onClick={handleBuyProduct}>
                     Comprar agora
                 </button>
             </ProductDetails>
         </ProductContainer>
+        </>
     )
 }
 
@@ -73,7 +104,8 @@ export const getStaticProps: GetStaticProps<any, { id: string }> = async ({ para
                   style: 'currency',
                   currency: 'BRL'
                 }).format((price.unit_amount!/100)),
-                description: product.description
+                description: product.description,
+                defaultPriceId: price.id
             }
         },
         revalidate: 60 * 60 * 1 // 1 hours
